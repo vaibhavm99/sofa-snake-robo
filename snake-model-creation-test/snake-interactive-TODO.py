@@ -19,7 +19,7 @@ def createScene(rootNode):
     camera = rootNode.addObject('InteractiveCamera', position=[0, 5, 20], lookAt=[0, 0, 0])
 
     # Snake parameters
-    num_segments = 4
+    num_segments = 7
     segment_length = 30.0
     radius = 0.1
 
@@ -35,7 +35,7 @@ def createScene(rootNode):
         segment = snakeBase.addChild(f'Segment_{i}')
         segment.addObject('EulerImplicitSolver', name='cg_odesolver')
         segment.addObject('CGLinearSolver', name='linear_solver')
-        segment.addObject('MechanicalObject', name='dofs', template='Rigid3', position=[[i * segment_length, 0, 0, 1, 0, 0, 1]])
+        segment.addObject('MechanicalObject', name='dofs', template='Rigid3', position=[[i * segment_length, 0, 0, 0, 0, 0, 1]])
         segment.addObject('UniformMass', totalMass=1.0)
         segment.addObject('UncoupledConstraintCorrection')
 

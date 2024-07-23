@@ -1,6 +1,5 @@
 import Sofa
 import numpy as np
-from scipy.spatial.transform import Rotation as R
 
 def createScene(rootNode):
     # Root Node
@@ -17,11 +16,11 @@ def createScene(rootNode):
     rootNode.addObject('DiscreteIntersection')
 
     # Camera
-    rootNode.addObject('InteractiveCamera', position=[0, 5, 20], lookAt=[0, 0, 0])
+    camera = rootNode.addObject('InteractiveCamera', position=[0, 5, 20], lookAt=[0, 0, 0])
 
     # Snake parameters
-    num_segments = 10
-    segment_length = 10.0
+    num_segments = 7
+    segment_length = 30.0
     radius = 0.1
 
     # Add gravity
@@ -36,33 +35,25 @@ def createScene(rootNode):
         segment = snakeBase.addChild(f'Segment_{i}')
         segment.addObject('EulerImplicitSolver', name='cg_odesolver')
         segment.addObject('CGLinearSolver', name='linear_solver')
-        
-        # Position of the segment
-        position = [i * segment_length, 0, 0]
-
-        # Calculate the quaternion for a 90-degree rotation around the Z-axis
-        rotation = R.from_euler('y', 90, degrees=True).as_quat()
-        orientation = list(rotation)
-
-        # Combine position and orientation
-        pose = position + orientation
-
-        segment.addObject('MechanicalObject', name='dofs', template='Rigid3', position=[pose])
+        segment.addObject('MechanicalObject', name='dofs', template='Rigid3', position=[[i * segment_length, 0, 0, 0, 0, 0, 1]])
         segment.addObject('UniformMass', totalMass=1.0)
         segment.addObject('UncoupledConstraintCorrection')
 
+        # Gravity is set here
+        segment.createObject('ConstantForceField', name='gravity', totalForce=[0, -9.81, 0])
+
+
         # Visual model
         visualNode = segment.addChild('Visual')
-        visualNode.addObject('MeshSTLLoader', name='loader', filename='mesh/dragon.stl', translation=position, rotation=rotation)
+        visualNode.addObject('MeshSTLLoader', name='loader', filename='mesh/sphere.stl', translation=[i * segment_length, 0, 0])
         visualNode.addObject('OglModel', src='@loader')
         visualNode.addObject('RigidMapping', input=segment.dofs.getLinkPath(), output=visualNode.getLinkPath())
 
         # Collision model
         collisionNode = segment.addChild('Collision')
-        collisionNode.addObject('MechanicalObject', template='Vec3d', position=[position])
+        collisionNode.addObject('MechanicalObject', template='Vec3d', position=[[i * segment_length, 0, 0]])
         collisionNode.addObject('SphereCollisionModel', radius=radius)
         collisionNode.addObject('RigidMapping', input=segment.dofs.getLinkPath(), output=collisionNode.getLinkPath())
-
 
         segments.append(segment)
 
@@ -70,9 +61,10 @@ def createScene(rootNode):
         if i > 0:
             previous_segment = segments[i - 1]
             segment.addObject('StiffSpringForceField', name=f'spring_{i}', object1=previous_segment.dofs.getLinkPath(), object2=segment.dofs.getLinkPath(), spring=[0, 0, 0, segment_length, 0, 0, 1, 0, 0, 1, 100, 0.5])
-
+        
     # Controller
-    rootNode.addObject(SnakeController(segments))
+    controller = SnakeController(segments)
+    rootNode.addObject(controller)
 
     return rootNode
 
@@ -81,16 +73,52 @@ class SnakeController(Sofa.Core.Controller):
     def __init__(self, segments):
         super().__init__()
         self.segments = segments
-        self.time = 0
+        self.target_position = None
 
     def onAnimateBeginEvent(self, event):
-        self.time += 0.01
-        wave_amplitude = 0.5
-        wave_length = 2
-        wave_speed = 2
-        for i, segment in enumerate(self.segments):
-            angle = wave_amplitude * np.sin(wave_length * i - wave_speed * self.time)
-            segment.dofs.position.value = [[i * 1.0, 0, 0, 0, np.sin(angle / 2), 0, np.cos(angle / 2)]]
+        if self.target_position:
+            self.move_towards_target()
+
+    def move_towards_target(self):
+        head = self.segments[0]
+        head_position = np.array(head.dofs.position[0][:3])
+        direction = np.array(self.target_position) - head_position
+        distance = np.linalg.norm(direction)
+
+        if distance > 0.1:  # Only move if the target is far enough
+            direction /= distance  # Normalize the direction
+            speed = 0.1  # Movement speed
+            new_position = head_position + direction * speed
+            head.dofs.position[0][:3] = new_position
+
+            # Move the rest of the segments
+            for i in range(1, len(self.segments)):
+                previous_segment = self.segments[i - 1]
+                segment = self.segments[i]
+                previous_position = np.array(previous_segment.dofs.position[0][:3])
+                segment_position = np.array(segment.dofs.position[0][:3])
+
+                direction = previous_position - segment_position
+                distance = np.linalg.norm(direction)
+
+                if distance > 0.1:  # Only move if the distance is far enough
+                    direction /= distance  # Normalize the direction
+                    new_position = segment_position + direction * speed
+
+                    segment.dofs.position[0][:3] = new_position
+
+    def onMouseButtonLeft(self, mouseX, mouseY, isPressed):
+        if isPressed:
+            # Convert mouse coordinates to scene coordinates
+            self.target_position = self.convertMouseToScenePosition(mouseX, mouseY)
+            print(f"Mouse pressed at: {self.target_position}")
+
+    def convertMouseToScenePosition(self, mouseX, mouseY):
+        # Placeholder function to convert mouse coordinates to scene coordinates
+        # Implement the appropriate conversion logic based on your scene setup
+        sceneX = (mouseX - 0.5) * 20  # Assuming the window width is normalized [0,1]
+        sceneY = (mouseY - 0.5) * -20  # Assuming the window height is normalized [0,1]
+        return [sceneX, 0, sceneY]
 
 
 if __name__ == '__main__':
