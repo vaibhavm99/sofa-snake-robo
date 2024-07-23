@@ -33,11 +33,15 @@ def createScene(rootNode):
     segments = []
     for i in range(num_segments):
         segment = snakeBase.addChild(f'Segment_{i}')
+        # Mechanical model
         segment.addObject('EulerImplicitSolver', name='cg_odesolver')
         segment.addObject('CGLinearSolver', name='linear_solver')
         segment.addObject('MechanicalObject', name='dofs', template='Rigid3', position=[[i * segment_length, 0, 0, 0, 0, 0, 1]])
         segment.addObject('UniformMass', totalMass=1.0)
         segment.addObject('UncoupledConstraintCorrection')
+
+        # Gravity is set here
+        segment.createObject('ConstantForceField', name='gravity', force=[0, -9.81, 0])
 
         # Visual model
         visualNode = segment.addChild('Visual')
